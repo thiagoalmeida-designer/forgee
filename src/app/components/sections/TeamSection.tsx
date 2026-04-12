@@ -1,7 +1,6 @@
 import { motion } from 'motion/react';
 import { AnimateOnScroll, SectionLabel } from '../AnimateOnScroll';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
-import imgAnaLuisa from '../../../imports/ana-luisa-coach.png';
 
 const coaches = [
   {
@@ -16,7 +15,7 @@ const coaches = [
     name: 'ANA LUÍSA',
     role: 'Conditioning',
     cref: 'CREF 078342-G/SP',
-    img: imgAnaLuisa,
+    img: 'https://images.unsplash.com/photo-1548690312-e3b507d8c110?q=80&w=687&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
   },
   {
     initials: 'BT',
