@@ -1,0 +1,543 @@
+// ============================================================
+// prisma/schema.prisma — Academia FORGEE
+// Validado campo a campo contra todas as telas do frontend
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // Supabase: connection pooling vs. direct
+}
+
+// ════════════════════════════════════════════════════════════
+// ACADEMIA — tela: Configurações › Geral
+// Campos: nome, cnpj, telefone, email, endereco, cidade,
+//         estado, cep (TabGeral)
+// ════════════════════════════════════════════════════════════
+
+model Academia {
+  id       String  @id @default(uuid())
+
+  // Dados da empresa (TabGeral)
+  nome     String  @default("FORGEE Academia")
+  cnpj     String?
+  telefone String?
+  email    String?
+  site     String?
+  logo     String? // URL do Storage (Supabase)
+
+  // Endereço completo (TabGeral)
+  endereco    String?
+  numero      String?
+  complemento String?
+  bairro      String?
+  cidade      String?
+  estado      String?
+  cep         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  configuracaoSistema ConfiguracaoSistema?
+
+  @@map("academia")
+}
+
+// ════════════════════════════════════════════════════════════
+// CONFIGURAÇÃO DO SISTEMA — tela: Configurações › Sistema
+// Campos: horaAbertura, horaFechamento, diasSemCheckinParaRisco,
+//         diasAntesVencimentoParaAlerta, notificações, WhatsApp
+// ════════════════════════════════════════════════════════════
+
+model ConfiguracaoSistema {
+  id         String @id @default(uuid())
+  academiaId String @unique
+
+  // Horário de Funcionamento (TabSistema)
+  horaAbertura   String @default("06:00") // formato HH:MM
+  horaFechamento String @default("22:00") // formato HH:MM
+
+  // Alertas Automáticos (TabSistema)
+  diasSemCheckinParaRisco       Int @default(10) // "Turistas"
+  diasAntesVencimentoParaAlerta Int @default(5)  // Aviso de vencimento
+
+  // Notificações (extensível)
+  notificacaoEmailAtivo    Boolean @default(false)
+  notificacaoWhatsAppAtivo Boolean @default(false)
+
+  // Integração WhatsApp (para mensagens automáticas)
+  whatsappToken  String?
+  whatsappNumero String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  academia Academia @relation(fields: [academiaId], references: [id], onDelete: Cascade)
+
+  @@map("configuracoes_sistema")
+}
+
+// ════════════════════════════════════════════════════════════
+// ADMINS — tela: Login + Configurações › Perfil Admin
+// Campos: email, senha, nome, cargo, telefone, foto,
+//         (senhaAtual / novaSenha usados apenas em runtime)
+// ════════════════════════════════════════════════════════════
+
+model Admin {
+  id           String    @id @default(uuid())
+
+  // Autenticação (Login.tsx)
+  email        String    @unique
+  senhaHash    String    // bcrypt hash — NUNCA armazenar em texto plano
+
+  // Perfil (TabPerfilAdmin)
+  nome         String
+  cargo        String?
+  telefone     String?
+  foto         String?   // URL do Storage
+
+  // Controle de acesso
+  ativo        Boolean   @default(true)
+  ultimoAcesso DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relações
+  checkInsRegistrados CheckIn[]    @relation("AdminCheckIns")
+  observacoes         Observacao[]
+
+  @@map("admins")
+}
+
+// ════════════════════════════════════════════════════════════
+// ALUNOS — telas: Alunos (lista), AlunosPerfil, NovoAluno,
+//                 ModoRecepcao (busca por código/email),
+//                 Dashboard (KPIs)
+// ════════════════════════════════════════════════════════════
+
+model Aluno {
+  id String @id @default(uuid())
+
+  // Identificação única — Alunos.tsx: "#5678" = "#" + codigoMembro
+  // ModoRecepcao.tsx: busca por codigoMembro ou email
+  codigoMembro String @unique // gerado sequencialmente (ex: "5678")
+  qrToken      String @unique @default(uuid()) // token para leitura do QR Code
+
+  // Dados Pessoais — NovoAluno.tsx seção 1
+  nomeCompleto   String
+  dataNascimento DateTime
+  cpf            String   @unique
+  rg             String?
+  telefone       String?
+  celular        String
+  email          String   @unique
+  foto           String?  // URL do Storage (upload com preview)
+
+  // Endereço — NovoAluno.tsx seção 1
+  endereco    String
+  numero      String
+  complemento String?
+  bairro      String
+  cidade      String
+  estado      String // sigla: "SP", "RJ", "MG" etc.
+  cep         String
+
+  // Status — Alunos.tsx: 'ativo' | 'inativo'
+  ativo Boolean @default(true)
+
+  // Informações Adicionais — NovoAluno.tsx seção 6
+  comoConheceu     String?
+  aceitouTermos    Boolean  @default(false)
+  dataAceiteTermos DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relações
+  objetivos  ObjetivoAluno[]
+  saude      SaudeAluno?
+  historico  HistoricoAtividade?
+  contratos  Contrato[]
+  checkIns   CheckIn[]
+  observacoes Observacao[]
+  avaliacoes Avaliacao[]
+
+  @@index([ativo])
+  @@index([codigoMembro])
+  @@index([email])
+  @@map("alunos")
+}
+
+// ─── Objetivos — NovoAluno.tsx seção 2 ───────────────────────
+// Checkboxes: "Ganho de massa muscular", "Perda de peso",
+//             "Condicionamento físico", "Saúde e bem-estar",
+//             "Reabilitação", "Performance esportiva"
+
+model ObjetivoAluno {
+  id       String @id @default(uuid())
+  alunoId  String
+  objetivo String // texto livre do checkbox selecionado
+  ordem    Int    @default(0)
+
+  aluno Aluno @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+
+  @@map("objetivos_aluno")
+}
+
+// ─── Saúde — NovoAluno.tsx seção 3 ───────────────────────────
+// Campos: possuiLimitacoes (radio), limitacoesDetalhes (textarea)
+//         fazUsoMedicamentos (radio), medicamentosDetalhes (textarea)
+//         possuiLesoes (radio), lesoesDetalhes (textarea)
+
+model SaudeAluno {
+  id      String @id @default(uuid())
+  alunoId String @unique
+
+  possuiLimitacoes   Boolean @default(false)
+  limitacoesDetalhes String?
+
+  fazUsoMedicamentos   Boolean @default(false)
+  medicamentosDetalhes String?
+
+  possuiLesoes   Boolean @default(false)
+  lesoesDetalhes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  aluno Aluno @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+
+  @@map("saude_aluno")
+}
+
+// ─── Histórico de Atividades — NovoAluno.tsx seção 4 ─────────
+// Campos: praticaAtividades (radio), atividadesDetalhes (textarea)
+
+model HistoricoAtividade {
+  id      String @id @default(uuid())
+  alunoId String @unique
+
+  praticaAtividades  Boolean @default(false)
+  atividadesDetalhes String? // "Musculação, corrida, natação..."
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  aluno Aluno @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+
+  @@map("historico_atividades")
+}
+
+// ════════════════════════════════════════════════════════════
+// PLANOS — telas: Configurações › Planos, AlunosPerfil,
+//                 Alunos (lista), NovoAluno (seção 5),
+//                 Dashboard (badges BASIC/PREMIUM/ELITE)
+// ════════════════════════════════════════════════════════════
+
+model Plano {
+  id   String @id @default(uuid())
+
+  // Configurações › Planos (TabPlanos + ModalCriarPlano)
+  nome        String  @unique // "BASIC", "PREMIUM", "ELITE"
+  descricao   String?
+  preco       Decimal @db.Decimal(10, 2)
+  duracaoMeses Int    @default(1)
+
+  // Aparência na UI (TabPlanos: PlanCard)
+  cor       String? // hex: "#f2f2f2", "#e8271a", "#8B5CF6"
+  destaque  Boolean @default(false) // checkbox "plano em destaque"
+  ordem     Int     @default(0)     // ordenação na tela de alunos
+
+  ativo Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  beneficios Beneficio[]
+  contratos  Contrato[]
+
+  @@map("planos")
+}
+
+// ─── Benefícios do Plano — Configurações › Planos ─────────────
+// PlanCard: lista de benefícios com remoção (X) e adição (+)
+
+model Beneficio {
+  id      String @id @default(uuid())
+  planoId String
+  texto   String // "Acesso à área de musculação", "Armário individual"...
+  ordem   Int    @default(0)
+
+  plano Plano @relation(fields: [planoId], references: [id], onDelete: Cascade)
+
+  @@map("beneficios_plano")
+}
+
+// ════════════════════════════════════════════════════════════
+// CONTRATOS — tela: NovoAluno seção 5 (Dados do Contrato)
+// Campos: dataInicio, dataVencimento, formaPagamento, plano,
+//         observacoes — também inferido em AlunosPerfil
+// ════════════════════════════════════════════════════════════
+
+model Contrato {
+  id      String @id @default(uuid())
+  alunoId String
+  planoId String
+
+  // NovoAluno seção 5
+  dataInicio       DateTime
+  dataVencimento   DateTime
+  dataCancelamento DateTime?
+
+  // Pagamento
+  formaPagamento String  // "PIX", "Boleto", "Cartão de Crédito", "Dinheiro"
+  valorMensal    Decimal @db.Decimal(10, 2)
+  diaVencimento  Int     // Dia do mês para cobrança (1–31)
+
+  // Status derivado (calculado ou mantido por trigger/cron)
+  status StatusContrato @default(ATIVO)
+
+  observacoes String? // NovoAluno: campo "Observações"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  aluno      Aluno      @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  plano      Plano      @relation(fields: [planoId], references: [id])
+  pagamentos Pagamento[]
+
+  @@index([alunoId])
+  @@index([status])
+  @@map("contratos")
+}
+
+enum StatusContrato {
+  ATIVO
+  SUSPENSO
+  CANCELADO
+  VENCIDO
+}
+
+// ════════════════════════════════════════════════════════════
+// PAGAMENTOS — tela: AlunosPerfil (Histórico de Pagamentos)
+// Campos: data, valor, metodo ('Boleto'|'PIX'|'Cartão'|'Dinheiro'),
+//         status ('pago'|'atrasado'|'pendente')
+// ════════════════════════════════════════════════════════════
+
+model Pagamento {
+  id         String @id @default(uuid())
+  contratoId String
+
+  // AlunosPerfil: data exibida, valor, metodo, status
+  dataVencimento DateTime
+  dataPagamento  DateTime?
+  valor          Decimal         @db.Decimal(10, 2)
+  status         StatusPagamento @default(PENDENTE)
+
+  // AlunosPerfil: "Boleto", "PIX", "Cartão", "Dinheiro"
+  formaPagamento String?
+
+  comprovante String? // URL do arquivo (Storage)
+  observacoes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contrato Contrato @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+
+  @@index([contratoId])
+  @@index([status])
+  @@index([dataVencimento])
+  @@map("pagamentos")
+}
+
+enum StatusPagamento {
+  PENDENTE  // amarelo — "Pendente"
+  PAGO      // verde   — "Pago"
+  ATRASADO  // vermelho — "Atrasado"
+  CANCELADO
+}
+
+// ════════════════════════════════════════════════════════════
+// CHECK-INS — telas: CheckIns (lista + KPIs),
+//                    ModoRecepcao (registro por QR/código/email),
+//                    AlunosPerfil (totalCheckins, ultimoCheckin),
+//                    Dashboard (check-ins hoje, turistas)
+// ════════════════════════════════════════════════════════════
+
+model CheckIn {
+  id      String  @id @default(uuid())
+  alunoId String
+  adminId String? // null = automático via QR; preenchido = manual pelo admin
+
+  // CheckIns.tsx: data + horario separados na exibição (formatados na query)
+  horaEntrada DateTime  @default(now())
+  horaSaida   DateTime?
+
+  // ModoRecepcao: como o check-in foi realizado
+  metodoEntrada MetodoCheckIn @default(QR_CODE)
+
+  // Tipo de visita
+  tipo        TipoCheckIn @default(NORMAL)
+  observacoes String?
+
+  createdAt DateTime @default(now())
+
+  aluno Aluno  @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  admin Admin? @relation("AdminCheckIns", fields: [adminId], references: [id])
+
+  @@index([alunoId])
+  @@index([horaEntrada])
+  @@map("check_ins")
+}
+
+// ModoRecepcao: toggle "CÓDIGO" | "EMAIL" → metodoEntrada
+enum MetodoCheckIn {
+  QR_CODE       // leitura automática do QR Code
+  CODIGO_MEMBRO // digitado manualmente (ex: "5678" = codigoMembro)
+  EMAIL         // busca por e-mail
+  MANUAL        // inserido pelo admin via painel
+}
+
+enum TipoCheckIn {
+  NORMAL
+  EXPERIMENTAL
+  REPOSICAO
+  CORTESIA
+}
+
+// ════════════════════════════════════════════════════════════
+// AVALIAÇÕES FÍSICAS — tela: AlunosPerfil (futura expansão)
+// Campos: peso, altura, imc + circunferências + composição
+// ════════════════════════════════════════════════════════════
+
+model Avaliacao {
+  id      String   @id @default(uuid())
+  alunoId String
+
+  data DateTime @default(now())
+
+  // Medidas básicas
+  peso   Decimal? @db.Decimal(5, 2) // kg
+  altura Decimal? @db.Decimal(5, 2) // cm
+  imc    Decimal? @db.Decimal(5, 2) // calculado
+
+  // Circunferências (cm)
+  pescoco  Decimal? @db.Decimal(5, 2)
+  torax    Decimal? @db.Decimal(5, 2)
+  cintura  Decimal? @db.Decimal(5, 2)
+  abdomen  Decimal? @db.Decimal(5, 2)
+  quadril  Decimal? @db.Decimal(5, 2)
+  coxaDir  Decimal? @db.Decimal(5, 2)
+  coxaEsq  Decimal? @db.Decimal(5, 2)
+  bracoDir Decimal? @db.Decimal(5, 2)
+  bracoEsq Decimal? @db.Decimal(5, 2)
+
+  // Composição corporal
+  percentualGordura Decimal? @db.Decimal(5, 2)
+  massaMagra        Decimal? @db.Decimal(5, 2)
+  massaGorda        Decimal? @db.Decimal(5, 2)
+
+  observacoes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  aluno Aluno @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+
+  @@index([alunoId])
+  @@map("avaliacoes")
+}
+
+// ════════════════════════════════════════════════════════════
+// OBSERVAÇÕES / NOTAS — tela: AlunosPerfil (aba futura)
+// Campos: titulo, conteudo, tipo, importante
+// ════════════════════════════════════════════════════════════
+
+model Observacao {
+  id      String @id @default(uuid())
+  alunoId String
+  adminId String
+
+  titulo     String?
+  conteudo   String
+  tipo       TipoObservacao @default(GERAL)
+  importante Boolean        @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  aluno Aluno @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  admin Admin @relation(fields: [adminId], references: [id])
+
+  @@index([alunoId])
+  @@map("observacoes")
+}
+
+enum TipoObservacao {
+  GERAL
+  SAUDE
+  TREINO
+  FINANCEIRO
+  COMPORTAMENTO
+}
+
+// ════════════════════════════════════════════════════════════
+// NOTIFICAÇÕES — para alertas automáticos do sistema
+// Dashboard: turistas sem check-in, pagamentos atrasados, novos
+// ConfiguracaoSistema: disparo configurável
+// ════════════════════════════════════════════════════════════
+
+model Notificacao {
+  id      String  @id @default(uuid())
+  alunoId String?
+  adminId String?
+
+  tipo     TipoNotificacao
+  titulo   String
+  mensagem String
+  lida     Boolean @default(false)
+
+  // Metadados extras (JSON flexível)
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([adminId, lida])
+  @@index([createdAt])
+  @@map("notificacoes")
+}
+
+enum TipoNotificacao {
+  PAGAMENTO_VENCENDO  // diasAntesVencimentoParaAlerta
+  PAGAMENTO_ATRASADO
+  SEM_CHECKIN         // diasSemCheckinParaRisco → "Turistas"
+  ANIVERSARIO
+  CONTRATO_VENCENDO
+  NOVO_ALUNO
+  SISTEMA
+}
+
+// ════════════════════════════════════════════════════════════
+// CONFIGURAÇÕES KEY-VALUE (extensível)
+// Para settings extras além dos modelos estruturados acima
+// ════════════════════════════════════════════════════════════
+
+model Configuracao {
+  id        String @id @default(uuid())
+  chave     String @unique // ex: "integracaoPix.chave", "recepcao.senhaExit"
+  valor     String
+  tipo      String // "STRING" | "NUMBER" | "BOOLEAN" | "JSON"
+  descricao String?
+  categoria String? // "RECEPCAO", "INTEGRACAO", "NOTIFICACAO", etc.
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("configuracoes")
+}

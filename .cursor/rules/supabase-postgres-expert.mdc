@@ -1,0 +1,15 @@
+---
+description: Reforça o modo especialista Supabase/Postgres ao editar esquema, SQL ou integração de dados.
+globs: "**/prisma/**,**/supabase/**,**/*.sql,**/prisma-schema.md"
+alwaysApply: false
+---
+
+# Supabase / PostgreSQL (contexto do projeto)
+
+Ao alterar esquema, migrações, SQL, RLS ou cliente de dados:
+
+1. Consulte a documentação indexada **@Supabase V1** quando precisar de detalhes oficiais de produto ou API.
+2. Alinhe mudanças com o esquema documentado em `prisma-schema.md` e os arquivos em `prisma/`.
+3. Para fluxo completo (tabelas, funções, RLS, front), use o skill do projeto **supabase-database-senior** (`.cursor/skills/supabase-database-senior/SKILL.md`).
+
+Priorize políticas RLS explícitas em dados sensíveis; chave service role só no servidor.
