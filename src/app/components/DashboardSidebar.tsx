@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -28,8 +29,20 @@ export function DashboardSidebar({ isOpen = false, onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
   const currentPath = location.pathname;
   const adminLabel = user?.email?.split('@')[0] ?? 'Admin';
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await signOut();
+      navigate('/login', { replace: true });
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   const sidebarContent = (
     <div className="flex flex-col h-full">
@@ -100,14 +113,15 @@ export function DashboardSidebar({ isOpen = false, onClose }: SidebarProps) {
         </div>
         <button
           type="button"
-          onClick={async () => {
-            await signOut();
-            navigate('/login', { replace: true });
-          }}
-          className="flex w-full items-center gap-2 px-3 py-2 text-[#606060] hover:text-[#A8A8A8] rounded-[10px] hover:bg-[#1a1a1a] transition-all duration-200 text-left"
+          onClick={handleSignOut}
+          disabled={signingOut}
+          aria-busy={signingOut}
+          className="flex w-full items-center gap-2 px-3 py-2 text-[#606060] hover:text-[#A8A8A8] rounded-[10px] hover:bg-[#1a1a1a] transition-all duration-200 text-left disabled:pointer-events-none disabled:opacity-50"
         >
           <LogOut size={15} />
-          <span style={{ fontFamily: FONT_INTER, fontSize: '13px' }}>Sair</span>
+          <span style={{ fontFamily: FONT_INTER, fontSize: '13px' }}>
+            {signingOut ? 'Saindo…' : 'Sair'}
+          </span>
         </button>
       </div>
     </div>

@@ -51,7 +51,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut({ scope: 'global' });
+    if (error) {
+      console.warn('[auth] signOut:', error.message);
+    }
   }, []);
 
   const value = useMemo(
